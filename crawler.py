@@ -11,10 +11,12 @@ from collections import deque
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Iterable
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urldefrag, urljoin, urlparse
 from urllib.request import Request, urlopen
 from urllib.robotparser import RobotFileParser
+
+from self_healing import AdaptiveRetryPolicy, CircuitBreaker, HealthMonitor
 
 
 class LinkExtractor(HTMLParser):
@@ -62,6 +64,9 @@ class Crawler:
         include_sitemap: bool = False,
         retries: int = 1,
         retry_backoff: float = 0.5,
+        health_monitor: HealthMonitor | None = None,
+        circuit_breaker: CircuitBreaker | None = None,
+        retry_policy: AdaptiveRetryPolicy | None = None,
     ) -> None:
         self.start_url = start_url
         self.max_depth = max_depth
@@ -76,6 +81,9 @@ class Crawler:
         self.include_sitemap = include_sitemap
         self.retries = retries
         self.retry_backoff = retry_backoff
+        self._health_monitor = health_monitor
+        self._circuit_breaker = circuit_breaker
+        self._retry_policy = retry_policy
         parsed = urlparse(start_url)
         self.origin = parsed.netloc
         self.scheme = parsed.scheme or "https"
@@ -128,6 +136,17 @@ class Crawler:
         return results
 
     def _fetch(self, url: str, depth: int) -> CrawlResult:
+        domain = urlparse(url).netloc
+
+        if self._circuit_breaker is not None and self._circuit_breaker.is_open(domain):
+            return CrawlResult(
+                url=url,
+                status=None,
+                links=[],
+                depth=depth,
+                error="circuit breaker open",
+            )
+
         attempt = 0
         while True:
             attempt += 1
@@ -140,6 +159,15 @@ class Crawler:
                     content_type = response.headers.get("Content-Type", "")
                     if "text/html" not in content_type:
                         elapsed_ms = int((time.monotonic() - started) * 1000)
+                        if self._health_monitor is not None:
+                            self._health_monitor.record_request(
+                                domain,
+                                success=True,
+                                status=status,
+                                elapsed_ms=elapsed_ms,
+                            )
+                        if self._circuit_breaker is not None:
+                            self._circuit_breaker.record_success(domain)
                         return CrawlResult(
                             url=url,
                             status=status,
@@ -156,9 +184,28 @@ class Crawler:
                     body = body_bytes.decode("utf-8", errors="replace")
                     elapsed_ms = int((time.monotonic() - started) * 1000)
             except Exception as exc:  # noqa: BLE001 - show capture error
-                if attempt <= self.retries:
-                    time.sleep(self.retry_backoff * attempt)
+                status_code = exc.code if isinstance(exc, HTTPError) else None  # type: ignore[union-attr]
+                should_retry = (
+                    self._retry_policy.should_retry(attempt, status_code, exc)
+                    if self._retry_policy is not None
+                    else attempt <= self.retries
+                )
+                if should_retry:
+                    backoff = (
+                        self._retry_policy.get_backoff(attempt, status_code)
+                        if self._retry_policy is not None
+                        else self.retry_backoff * attempt
+                    )
+                    if self._health_monitor is not None:
+                        self._health_monitor.record_request(domain, success=False)
+                    if self._circuit_breaker is not None:
+                        self._circuit_breaker.record_failure(domain)
+                    time.sleep(backoff)
                     continue
+                if self._health_monitor is not None:
+                    self._health_monitor.record_request(domain, success=False)
+                if self._circuit_breaker is not None:
+                    self._circuit_breaker.record_failure(domain)
                 return CrawlResult(
                     url=url,
                     status=None,
@@ -166,6 +213,17 @@ class Crawler:
                     depth=depth,
                     error=str(exc),
                 )
+
+            if self._health_monitor is not None:
+                self._health_monitor.record_request(
+                    domain,
+                    success=True,
+                    status=status,
+                    elapsed_ms=elapsed_ms,
+                    bytes_read=len(body_bytes),
+                )
+            if self._circuit_breaker is not None:
+                self._circuit_breaker.record_success(domain)
 
             extractor = LinkExtractor()
             extractor.feed(body)
