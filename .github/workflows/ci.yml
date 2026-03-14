@@ -10,6 +10,8 @@ jobs:
   test:
     name: Run tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -23,12 +25,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install pytest
+        run: pip install pytest
+
       - name: Run unit tests
         run: python -m pytest test_crawler.py -v --tb=short
 
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@v4

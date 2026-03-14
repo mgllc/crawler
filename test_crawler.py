@@ -548,7 +548,7 @@ class TestHealthMonitor(unittest.TestCase):
             m.record_request("bad.com", success=False)
         status = m.get_health_status()
         alerts = status["alerts"]
-        self.assertTrue(any("bad.com" in a for a in alerts))
+        self.assertTrue(any(a.startswith("Domain bad.com") for a in alerts))
 
     def test_clear_alerts_resets_state(self):
         m = HealthMonitor()
