@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import time
 import unittest
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError, URLError
 
 from crawler import CrawlResult, Crawler, LinkExtractor
