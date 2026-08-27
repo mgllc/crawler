@@ -15,7 +15,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError, URLError
 
-from crawler import CrawlResult, Crawler, LinkExtractor
+from crawler import Crawler, CrawlResult, LinkExtractor
 from self_healing import (
     AdaptiveRetryPolicy,
     CircuitBreaker,
@@ -23,7 +23,6 @@ from self_healing import (
     HealthCheck,
     HealthMonitor,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -132,13 +131,13 @@ class TestCrawlResult(unittest.TestCase):
 class TestCrawlerBasic(unittest.TestCase):
 
     def _crawler(self, **kw) -> Crawler:
-        defaults = dict(
-            start_url="http://example.com",
-            max_depth=1,
-            max_pages=10,
-            respect_robots=False,
-            retries=0,
-        )
+        defaults = {
+            "start_url": "http://example.com",
+            "max_depth": 1,
+            "max_pages": 10,
+            "respect_robots": False,
+            "retries": 0,
+        }
         defaults.update(kw)
         return Crawler(**defaults)
 
@@ -225,14 +224,14 @@ class TestCrawlerBasic(unittest.TestCase):
 class TestCrawlerDomainFilter(unittest.TestCase):
 
     def _crawler(self, **kw) -> Crawler:
-        defaults = dict(
-            start_url="http://example.com",
-            max_depth=1,
-            max_pages=10,
-            same_domain=True,
-            respect_robots=False,
-            retries=0,
-        )
+        defaults = {
+            "start_url": "http://example.com",
+            "max_depth": 1,
+            "max_pages": 10,
+            "same_domain": True,
+            "respect_robots": False,
+            "retries": 0,
+        }
         defaults.update(kw)
         return Crawler(**defaults)
 
@@ -442,7 +441,7 @@ class TestCircuitBreaker(unittest.TestCase):
                 for _ in range(20):
                     cb.record_failure("shared.com")
                     cb.is_open("shared.com")
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — stress test must catch any race-induced failure
                 errors.append(exc)
 
         threads = [threading.Thread(target=hammer) for _ in range(5)]

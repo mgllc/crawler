@@ -8,9 +8,9 @@ import json
 import sys
 import time
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from typing import Iterable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urldefrag, urljoin, urlparse
 from urllib.request import Request, urlopen
@@ -244,7 +244,7 @@ class Crawler:
             )
 
     def _normalize_link(self, base_url: str, link: str) -> str | None:
-        if link.startswith("mailto:") or link.startswith("javascript:"):
+        if link.startswith(("mailto:", "javascript:")):
             return None
         absolute = urljoin(base_url, link)
         normalized, _ = urldefrag(absolute)
@@ -263,11 +263,9 @@ class Crawler:
 
     def _is_same_domain(self, link: str) -> bool:
         parsed = urlparse(link)
-        if parsed.netloc == self.origin:
-            return True
-        if self.allow_subdomains and parsed.netloc.endswith(f".{self.origin}"):
-            return True
-        return False
+        return parsed.netloc == self.origin or (
+            self.allow_subdomains and parsed.netloc.endswith(f".{self.origin}")
+        )
 
     def _robots_parser(self, url: str) -> RobotFileParser:
         parsed = urlparse(url)
@@ -294,7 +292,7 @@ class Crawler:
                 if "xml" not in response.headers.get("Content-Type", ""):
                     return
                 body = response.read(self.max_bytes).decode("utf-8", errors="replace")
-        except Exception:
+        except (URLError, OSError):
             return
         for line in body.splitlines():
             line = line.strip()
