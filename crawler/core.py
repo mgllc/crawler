@@ -5,6 +5,8 @@ import time
 from collections import deque
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
+from urllib.error import HTTPError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from crawler.agent import seed_agent_endpoints
@@ -13,6 +15,7 @@ from crawler.extract import LinkExtractor, canonicalize_url, normalize_link
 from crawler.models import CrawlResult
 from crawler.policy import CrawlPolicy
 from crawler.storage import init_db, load_state_db, save_state_db
+from self_healing import AdaptiveRetryPolicy, CircuitBreaker, HealthMonitor
 
 
 class Crawler:
@@ -41,6 +44,9 @@ class Crawler:
         max_path_repeats: int = 4,
         per_host_workers: int = 2,
         agent_discovery: bool = False,
+        health_monitor: HealthMonitor | None = None,
+        circuit_breaker: CircuitBreaker | None = None,
+        retry_policy: AdaptiveRetryPolicy | None = None,
     ) -> None:
         self.start_url = canonicalize_url(start_url)
         self.max_depth = max_depth
@@ -55,6 +61,9 @@ class Crawler:
         self.recrawl_after_seconds = recrawl_after_seconds
         self.render_js = render_js
         self.agent_discovery = agent_discovery
+        self._health_monitor = health_monitor
+        self._circuit_breaker = circuit_breaker
+        self._retry_policy = retry_policy
         self.policy = CrawlPolicy(
             start_url=self.start_url,
             same_domain=same_domain,
@@ -237,7 +246,34 @@ class Crawler:
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(report, handle, indent=2, sort_keys=True)
 
+    def _note_success(self, domain: str, status: int | None, elapsed_ms: int | None) -> None:
+        if self._health_monitor is not None:
+            self._health_monitor.record_request(
+                domain, success=True, status=status, elapsed_ms=elapsed_ms
+            )
+        if self._circuit_breaker is not None:
+            self._circuit_breaker.record_success(domain)
+
+    def _note_failure(self, domain: str, status: int | None) -> None:
+        if self._health_monitor is not None:
+            self._health_monitor.record_request(domain, success=False, status=status)
+        if self._circuit_breaker is not None:
+            self._circuit_breaker.record_failure(domain)
+
     def _fetch(self, url: str, depth: int) -> CrawlResult:
+        domain = urlparse(url).netloc
+
+        if self._circuit_breaker is not None and self._circuit_breaker.is_open(domain):
+            return CrawlResult(
+                url=url,
+                status=None,
+                links=[],
+                depth=depth,
+                error="circuit breaker open",
+                fetched_at=time.time(),
+                next_crawl_at=time.time() + self.recrawl_after_seconds,
+            )
+
         attempt = 0
         while True:
             attempt += 1
@@ -275,6 +311,7 @@ class Crawler:
                         metadata={"rendered_js": True},
                     )
                     self.policy.release_host_slot(url)
+                    self._note_success(domain, 200, elapsed_ms)
                     return result
 
                 with urlopen(request, timeout=self.timeout) as response:
@@ -306,6 +343,7 @@ class Crawler:
                             from_cache_hint=True,
                         )
                         self.policy.release_host_slot(url)
+                        self._note_success(domain, status, elapsed_ms)
                         return result
 
                     if "json" in content_type.lower():
@@ -336,6 +374,7 @@ class Crawler:
                             metadata=metadata,
                         )
                         self.policy.release_host_slot(url)
+                        self._note_success(domain, status, elapsed_ms)
                         return result
 
                     if "text/html" not in content_type:
@@ -350,6 +389,7 @@ class Crawler:
                             next_crawl_at=time.time() + self.recrawl_after_seconds,
                         )
                         self.policy.release_host_slot(url)
+                        self._note_success(domain, status, elapsed_ms)
                         return result
 
                     body_bytes = response.read(self.max_bytes + 1)
@@ -359,9 +399,21 @@ class Crawler:
                     body = body_bytes.decode("utf-8", errors="replace")
             except Exception as exc:  # noqa: BLE001
                 self.policy.release_host_slot(url)
-                if attempt <= self.retries:
-                    time.sleep(self.retry_backoff * attempt)
+                status_code = exc.code if isinstance(exc, HTTPError) else None
+                should_retry = (
+                    self._retry_policy.should_retry(attempt, status_code, exc)
+                    if self._retry_policy is not None
+                    else attempt <= self.retries
+                )
+                if should_retry:
+                    backoff = (
+                        self._retry_policy.get_backoff(attempt, status_code)
+                        if self._retry_policy is not None
+                        else self.retry_backoff * attempt
+                    )
+                    time.sleep(backoff)
                     continue
+                self._note_failure(domain, status_code)
                 return CrawlResult(
                     url=url,
                     status=None,
@@ -388,4 +440,5 @@ class Crawler:
                 next_crawl_at=time.time() + self.recrawl_after_seconds,
             )
             self.policy.release_host_slot(url)
+            self._note_success(domain, status, elapsed_ms)
             return result
