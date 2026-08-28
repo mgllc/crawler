@@ -25,6 +25,16 @@ A modular crawler with breadth-first traversal, policies, persistence, and optio
 - Optional JS rendering pipeline (`--render-js`) via Playwright if installed.
 - Agent/server discovery mode with endpoint seeding, inventory, and service graph outputs.
 
+## Reliability
+
+`Crawler` optionally accepts a `health_monitor`, `circuit_breaker`, and
+`retry_policy` (see `self_healing.py`) for production-grade fault handling:
+per-domain circuit breaking after repeated failures, HTTP-status-aware
+adaptive retry/backoff, and real-time health/anomaly tracking. These are
+library-level options (construct the objects and pass them to `Crawler(...)`)
+rather than CLI flags — see `test_crawler.py`'s `TestCrawlerWithSelfHealing`
+for usage examples.
+
 ## Core features
 - Same-domain restriction, optional subdomain support, or full external crawling (`--all-domains`).
 - Domain include/exclude filters for controlled multi-domain scans.
@@ -72,6 +82,10 @@ python3 crawler.py https://example.com --agent-discovery \
 ```
 
 ## Testing
+Two suites cover this project: `test_crawler.py` at the repo root (core
+crawl loop, self-healing components) and `tests/` (agent/server discovery,
+inventory, and service-graph generation).
 ```bash
+python3 -m pytest test_crawler.py -v
 python3 -m unittest discover -s tests -v
 ```
