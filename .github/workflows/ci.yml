@@ -29,7 +29,7 @@ jobs:
         run: pip install pytest
 
       - name: Run unit tests
-        run: python -m pytest test_crawler.py -v --tb=short
+        run: python -m pytest test_crawler.py tests/ -v --tb=short
 
   lint:
     name: Lint
@@ -49,4 +49,4 @@ jobs:
         run: pip install ruff
 
       - name: Lint with Ruff
-        run: ruff check crawler.py self_healing.py test_crawler.py
+        run: ruff check .

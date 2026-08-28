@@ -141,78 +141,79 @@ class TestCrawlerBasic(unittest.TestCase):
         defaults.update(kw)
         return Crawler(**defaults)
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_single_page_crawl(self, mock_open):
         mock_open.return_value = _mock_response(body=_html([]))
-        results = self._crawler().crawl()
+        results, _, _ = self._crawler().crawl()
         self.assertEqual(len(results), 1)
-        self.assertEqual(results[0].url, "http://example.com")
+        # start_url is canonicalized (bare domain gets a trailing "/").
+        self.assertEqual(results[0].url, "http://example.com/")
         self.assertEqual(results[0].status, 200)
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_follows_links_within_depth(self, mock_open):
         mock_open.side_effect = [
             _mock_response(body=_html(["/page1"])),
             _mock_response(body=_html([])),
         ]
-        results = self._crawler(max_depth=1).crawl()
+        results, _, _ = self._crawler(max_depth=1).crawl()
         urls = [r.url for r in results]
-        self.assertIn("http://example.com", urls)
+        self.assertIn("http://example.com/", urls)
         self.assertIn("http://example.com/page1", urls)
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_respects_max_depth(self, mock_open):
         # depth-0 page links to /p1; depth-1 page links to /p2 (should NOT be fetched)
         mock_open.side_effect = [
             _mock_response(body=_html(["/p1"])),
             _mock_response(body=_html(["/p2"])),
         ]
-        results = self._crawler(max_depth=1).crawl()
+        results, _, _ = self._crawler(max_depth=1).crawl()
         urls = [r.url for r in results]
         self.assertNotIn("http://example.com/p2", urls)
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_respects_max_pages(self, mock_open):
         mock_open.side_effect = [
             _mock_response(body=_html(["/p1", "/p2", "/p3"])),
             _mock_response(body=_html([])),
             _mock_response(body=_html([])),
         ]
-        results = self._crawler(max_pages=2, max_depth=1).crawl()
+        results, _, _ = self._crawler(max_pages=2, max_depth=1).crawl()
         self.assertLessEqual(len(results), 2)
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_non_html_content_type(self, mock_open):
         mock_open.return_value = _mock_response(
             body=b"data", content_type="application/json"
         )
-        results = self._crawler().crawl()
+        results, _, _ = self._crawler().crawl()
         self.assertEqual(results[0].links, [])
         self.assertEqual(results[0].content_type, "application/json")
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_skips_mailto_and_javascript_links(self, mock_open):
         body = b'<a href="mailto:x@y.com">m</a><a href="javascript:void(0)">j</a>'
         mock_open.return_value = _mock_response(body=body)
-        results = self._crawler().crawl()
+        results, _, _ = self._crawler().crawl()
         self.assertEqual(results[0].links, [])
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_deduplicates_visited_urls(self, mock_open):
         # Both pages link to each other – should only visit each once.
         mock_open.side_effect = [
             _mock_response(body=_html(["/page1"])),
             _mock_response(body=_html(["http://example.com"])),
         ]
-        results = self._crawler(max_depth=2, max_pages=10).crawl()
+        results, _, _ = self._crawler(max_depth=2, max_pages=10).crawl()
         urls = [r.url for r in results]
         self.assertEqual(len(urls), len(set(urls)))
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_truncated_response_recorded_as_error(self, mock_open):
         body = b"x" * 10
         mock_open.return_value = _mock_response(body=body)
-        results = self._crawler(max_bytes=5).crawl()
+        results, _, _ = self._crawler(max_bytes=5).crawl()
         self.assertIsNotNone(results[0].error)
         self.assertIn("truncated", results[0].error)
 
@@ -235,38 +236,38 @@ class TestCrawlerDomainFilter(unittest.TestCase):
         defaults.update(kw)
         return Crawler(**defaults)
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_blocks_external_links(self, mock_open):
         mock_open.return_value = _mock_response(
             body=_html(["http://other.com/page"])
         )
-        results = self._crawler().crawl()
+        results, _, _ = self._crawler().crawl()
         self.assertEqual(len(results), 1)  # only the start URL
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_allows_external_with_flag(self, mock_open):
         mock_open.side_effect = [
             _mock_response(body=_html(["http://other.com/page"])),
             _mock_response(body=_html([])),
         ]
-        results = self._crawler(same_domain=False).crawl()
+        results, _, _ = self._crawler(same_domain=False).crawl()
         self.assertEqual(len(results), 2)
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_blocks_subdomains_by_default(self, mock_open):
         mock_open.return_value = _mock_response(
             body=_html(["http://sub.example.com/page"])
         )
-        results = self._crawler().crawl()
+        results, _, _ = self._crawler().crawl()
         self.assertEqual(len(results), 1)
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_allows_subdomains_with_flag(self, mock_open):
         mock_open.side_effect = [
             _mock_response(body=_html(["http://sub.example.com/page"])),
             _mock_response(body=_html([])),
         ]
-        results = self._crawler(allow_subdomains=True).crawl()
+        results, _, _ = self._crawler(allow_subdomains=True).crawl()
         self.assertEqual(len(results), 2)
 
 
@@ -276,8 +277,8 @@ class TestCrawlerDomainFilter(unittest.TestCase):
 
 class TestCrawlerRetry(unittest.TestCase):
 
-    @patch("crawler.time.sleep")
-    @patch("crawler.urlopen")
+    @patch("crawler.core.time.sleep")
+    @patch("crawler.core.urlopen")
     def test_retries_on_network_error(self, mock_open, mock_sleep):
         mock_open.side_effect = [
             URLError("connection refused"),
@@ -290,12 +291,12 @@ class TestCrawlerRetry(unittest.TestCase):
             retries=1,
             retry_backoff=0.0,
         )
-        results = c.crawl()
+        results, _, _ = c.crawl()
         self.assertEqual(results[0].status, 200)
         self.assertIsNone(results[0].error)
 
-    @patch("crawler.time.sleep")
-    @patch("crawler.urlopen")
+    @patch("crawler.core.time.sleep")
+    @patch("crawler.core.urlopen")
     def test_returns_error_after_all_retries_exhausted(self, mock_open, mock_sleep):
         mock_open.side_effect = URLError("timeout")
         c = Crawler(
@@ -305,13 +306,13 @@ class TestCrawlerRetry(unittest.TestCase):
             retries=2,
             retry_backoff=0.0,
         )
-        results = c.crawl()
+        results, _, _ = c.crawl()
         self.assertIsNone(results[0].status)
         self.assertIsNotNone(results[0].error)
         self.assertEqual(mock_open.call_count, 3)  # 1 initial + 2 retries
 
-    @patch("crawler.time.sleep")
-    @patch("crawler.urlopen")
+    @patch("crawler.core.time.sleep")
+    @patch("crawler.core.urlopen")
     def test_zero_retries_does_not_retry(self, mock_open, mock_sleep):
         mock_open.side_effect = URLError("refused")
         c = Crawler(
@@ -320,7 +321,7 @@ class TestCrawlerRetry(unittest.TestCase):
             respect_robots=False,
             retries=0,
         )
-        results = c.crawl()
+        results, _, _ = c.crawl()
         self.assertEqual(mock_open.call_count, 1)
         self.assertIsNotNone(results[0].error)
 
@@ -352,12 +353,12 @@ class TestCrawlerRobots(unittest.TestCase):
             respect_robots=True,
             retries=0,
         )
-        with patch.object(c, "_robots_parser", return_value=self._disallow_parser()):
-            results = c.crawl()
+        with patch.object(c.policy, "robots_parser", return_value=self._disallow_parser()):
+            results, _, _ = c.crawl()
         self.assertEqual(results[0].error, "blocked by robots.txt")
         self.assertIsNone(results[0].status)
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_allowed_by_robots_proceeds(self, mock_open):
         mock_open.return_value = _mock_response(body=_html([]))
         c = Crawler(
@@ -366,8 +367,8 @@ class TestCrawlerRobots(unittest.TestCase):
             respect_robots=True,
             retries=0,
         )
-        with patch.object(c, "_robots_parser", return_value=self._allow_parser()):
-            results = c.crawl()
+        with patch.object(c.policy, "robots_parser", return_value=self._allow_parser()):
+            results, _, _ = c.crawl()
         self.assertEqual(results[0].status, 200)
 
 
@@ -632,7 +633,7 @@ class TestCrawlerWithSelfHealing(unittest.TestCase):
         )
         return crawler, monitor, cb
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_successful_crawl_records_in_monitor(self, mock_open):
         mock_open.return_value = _mock_response(body=_html([]))
         crawler, monitor, _ = self._make_crawler()
@@ -641,8 +642,8 @@ class TestCrawlerWithSelfHealing(unittest.TestCase):
         self.assertEqual(status["total_requests"], 1)
         self.assertEqual(status["total_failures"], 0)
 
-    @patch("crawler.time.sleep")
-    @patch("crawler.urlopen")
+    @patch("crawler.core.time.sleep")
+    @patch("crawler.core.urlopen")
     def test_failed_crawl_records_failure_in_monitor(self, mock_open, mock_sleep):
         mock_open.side_effect = URLError("refused")
         crawler, monitor, _ = self._make_crawler()
@@ -650,7 +651,7 @@ class TestCrawlerWithSelfHealing(unittest.TestCase):
         status = monitor.get_health_status()
         self.assertEqual(status["total_failures"], 1)
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_circuit_breaker_blocks_open_domain(self, mock_open):
         _, _, cb = self._make_crawler()
         # Open the circuit manually.
@@ -662,12 +663,12 @@ class TestCrawlerWithSelfHealing(unittest.TestCase):
             respect_robots=False,
             circuit_breaker=cb,
         )
-        results = crawler.crawl()
+        results, _, _ = crawler.crawl()
         mock_open.assert_not_called()
         self.assertEqual(results[0].error, "circuit breaker open")
 
-    @patch("crawler.time.sleep")
-    @patch("crawler.urlopen")
+    @patch("crawler.core.time.sleep")
+    @patch("crawler.core.urlopen")
     def test_adaptive_policy_skips_retry_on_404(self, mock_open, mock_sleep):
         """AdaptiveRetryPolicy should NOT retry a 404 error."""
         http_error = HTTPError(
@@ -681,13 +682,13 @@ class TestCrawlerWithSelfHealing(unittest.TestCase):
             respect_robots=False,
             retry_policy=policy,
         )
-        results = crawler.crawl()
+        results, _, _ = crawler.crawl()
         # Should only have attempted once (no retry for 404).
         self.assertEqual(mock_open.call_count, 1)
         self.assertIsNotNone(results[0].error)
 
-    @patch("crawler.time.sleep")
-    @patch("crawler.urlopen")
+    @patch("crawler.core.time.sleep")
+    @patch("crawler.core.urlopen")
     def test_adaptive_policy_retries_on_503(self, mock_open, mock_sleep):
         """AdaptiveRetryPolicy should retry 503 errors."""
         http_error = HTTPError(
@@ -705,11 +706,11 @@ class TestCrawlerWithSelfHealing(unittest.TestCase):
             respect_robots=False,
             retry_policy=policy,
         )
-        results = crawler.crawl()
+        results, _, _ = crawler.crawl()
         self.assertEqual(mock_open.call_count, 2)
         self.assertEqual(results[0].status, 200)
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_health_check_integration(self, mock_open):
         mock_open.return_value = _mock_response(body=_html([]))
         monitor = HealthMonitor()
@@ -734,7 +735,7 @@ class TestCrawlerWithSelfHealing(unittest.TestCase):
 
 class TestCrawlerScalability(unittest.TestCase):
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_many_pages_within_limit(self, mock_open):
         """Crawler should handle a large page limit without errors."""
         pages = 50
@@ -747,10 +748,10 @@ class TestCrawlerScalability(unittest.TestCase):
             respect_robots=False,
             retries=0,
         )
-        results = c.crawl()
+        results, _, _ = c.crawl()
         self.assertEqual(len(results), 1)  # only start URL (depth 0)
 
-    @patch("crawler.urlopen")
+    @patch("crawler.core.urlopen")
     def test_normalizes_relative_and_absolute_links(self, mock_open):
         body = b'<a href="/rel">r</a><a href="http://example.com/abs">a</a>'
         mock_open.side_effect = [
@@ -765,7 +766,7 @@ class TestCrawlerScalability(unittest.TestCase):
             respect_robots=False,
             retries=0,
         )
-        results = c.crawl()
+        results, _, _ = c.crawl()
         urls = [r.url for r in results]
         self.assertIn("http://example.com/rel", urls)
         self.assertIn("http://example.com/abs", urls)
