@@ -22,7 +22,7 @@ class CrawlResult:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, payload: dict[str, object]) -> "CrawlResult":
+    def from_dict(cls, payload: dict[str, object]) -> CrawlResult:
         return cls(
             url=str(payload.get("url", "")),
             status=payload.get("status") if isinstance(payload.get("status"), int) else None,

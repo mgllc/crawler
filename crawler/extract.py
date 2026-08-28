@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from html.parser import HTMLParser
-from urllib.parse import parse_qsl, urlencode, urldefrag, urljoin, urlparse, urlunparse
+from urllib.parse import parse_qsl, urldefrag, urlencode, urljoin, urlparse, urlunparse
 
 TRACKING_PARAMS = {
     "utm_source",
@@ -52,7 +52,7 @@ def canonicalize_url(url: str) -> str:
 
 
 def normalize_link(base_url: str, link: str) -> str | None:
-    if link.startswith("mailto:") or link.startswith("javascript:"):
+    if link.startswith(("mailto:", "javascript:")):
         return None
     absolute = urljoin(base_url, link)
     normalized, _ = urldefrag(absolute)

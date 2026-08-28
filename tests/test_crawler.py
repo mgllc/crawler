@@ -5,7 +5,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from crawler.agent import build_agent_inventory, build_service_graph, seed_agent_endpoints
+from crawler.agent import (
+    build_agent_inventory,
+    build_service_graph,
+    seed_agent_endpoints,
+)
 from crawler.core import Crawler
 from crawler.extract import canonicalize_url, normalize_link
 

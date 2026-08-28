@@ -23,7 +23,7 @@ def seed_agent_endpoints(start_url: str) -> list[str]:
 
 def classify_endpoint(url: str, content_type: str | None) -> str:
     path = urlparse(url).path.lower()
-    if path.endswith("openapi.json") or path.endswith("swagger.json"):
+    if path.endswith(("openapi.json", "swagger.json")):
         return "api_schema"
     if path.endswith("/v1/models"):
         return "model_catalog"

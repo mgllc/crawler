@@ -358,7 +358,7 @@ class Crawler:
                                         names.append(item["id"])
                                 if names:
                                     metadata["models"] = names
-                        except Exception:  # noqa: BLE001
+                        except json.JSONDecodeError:
                             pass
 
                         result = CrawlResult(

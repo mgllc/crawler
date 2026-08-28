@@ -97,9 +97,7 @@ class CrawlPolicy:
             self._domain_matches(netloc, domain) for domain in self.include_domains
         ):
             return False
-        if any(self._domain_matches(netloc, domain) for domain in self.exclude_domains):
-            return False
-        return True
+        return not any(self._domain_matches(netloc, domain) for domain in self.exclude_domains)
 
     def is_allowed_domain(self, link: str) -> bool:
         if self._looks_like_trap(link):
@@ -109,11 +107,9 @@ class CrawlPolicy:
         if not self.same_domain:
             return True
         parsed = urlparse(link)
-        if parsed.netloc == self.origin:
-            return True
-        if self.allow_subdomains and parsed.netloc.endswith(f".{self.origin}"):
-            return True
-        return False
+        return parsed.netloc == self.origin or (
+            self.allow_subdomains and parsed.netloc.endswith(f".{self.origin}")
+        )
 
     def filter_links(self, links: list[str]) -> list[str]:
         return [link for link in links if self.is_allowed_domain(link)]
@@ -198,7 +194,7 @@ class CrawlPolicy:
                 if "xml" not in response.headers.get("Content-Type", ""):
                     return
                 body = response.read(self.max_bytes)
-        except Exception:
+        except (URLError, OSError):
             return
 
         try:

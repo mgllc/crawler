@@ -9,7 +9,7 @@ def render_page_html(url: str, timeout_ms: int = 10_000) -> str:
 
     try:
         from playwright.sync_api import sync_playwright  # type: ignore
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise RuntimeError("render-js requested but playwright is not installed") from exc
 
     with sync_playwright() as playwright:
