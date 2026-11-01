@@ -2,6 +2,15 @@
 
 A modular crawler with breadth-first traversal, policies, persistence, and optional rendering.
 
+## GovDOSS Engineering Evidence Watch
+
+`python -m crawler.watch` provides a separate restricted profile for reviewed
+static engineering sources: bounded HTTPS collection, durable snapshots with
+hashes, meaningful-change reports and resumable cycles. It adds no scheduler or
+automatic actions. Start with the [offline demonstration and operating contract](docs/engineering-evidence-watch.md).
+Live deployment and source enrollment require separate review; the original
+crawler commands below retain their existing behavior and coverage boundaries.
+
 ## Implemented roadmap phases
 
 ### Phase A (Scale)

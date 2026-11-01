@@ -1,0 +1,12 @@
+{
+  "https://docs.example.com/robots.txt": {
+    "status": 200,
+    "content_type": "text/plain",
+    "body": "User-agent: *\nAllow: /\n"
+  },
+  "https://docs.example.com/releases": {
+    "status": 200,
+    "content_type": "text/html; charset=utf-8",
+    "body": "<html><nav>Home | About</nav><main><h1>Example dependency release</h1><p>Version 1 supports the existing API.</p></main><footer>Generated yesterday</footer></html>"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "max_requests_per_run": 4,
+  "max_bytes_per_response": 65536,
+  "sources": [
+    {
+      "id": "dependency-release-notes",
+      "url": "https://docs.example.com/releases",
+      "repositories": ["GovDOSS/GODSclaw", "GovDOSS/telmo"]
+    }
+  ]
+}
