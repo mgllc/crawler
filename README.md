@@ -2,6 +2,26 @@
 
 A modular crawler with breadth-first traversal, policies, persistence, and optional rendering.
 
+## Source-change briefs
+
+Monitor a declared set of public HTTPS sources and produce JSON and Markdown
+briefs with content digests, change evidence, and visible retrieval failures:
+
+```bash
+python3 -m crawler.monitor \
+  --sources examples/source-monitor.json \
+  --state-db artifacts/source-monitor/state.sqlite \
+  --report artifacts/source-monitor/brief.json \
+  --markdown artifacts/source-monitor/brief.md
+```
+
+The first successful run establishes baselines. Later runs report changed and
+unchanged content; failures preserve the last good observation. This opt-in
+monitor uses no model API, follows no page links or redirects, and keeps its
+SQLite history separate from crawl-resume state. See
+[the source monitor guide](docs/source-monitor.md) for supported formats,
+exit codes, recovery, limits, and the pilot acceptance criteria.
+
 ## Implemented roadmap phases
 
 ### Phase A (Scale)
@@ -82,10 +102,9 @@ python3 crawler.py https://example.com --agent-discovery \
 ```
 
 ## Testing
-Two suites cover this project: `test_crawler.py` at the repo root (core
-crawl loop, self-healing components) and `tests/` (agent/server discovery,
-inventory, and service-graph generation).
+The suites cover the core crawl loop, self-healing, agent/server discovery,
+source-monitor acceptance, and public HTTPS boundaries.
 ```bash
-python3 -m pytest test_crawler.py -v
-python3 -m unittest discover -s tests -v
+python3 -m pytest test_crawler.py tests/ -v
+python3 -m unittest test_crawler tests.test_crawler tests.test_monitor tests.test_monitor_http -v
 ```

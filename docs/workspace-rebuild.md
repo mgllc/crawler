@@ -4,7 +4,7 @@ The `Workspace rebuild` workflow runs on every branch push and pull request, on 
 
 ## Verified scope
 
-Python compilation and both unit suites.
+Python compilation, the existing crawl suites, source-monitor acceptance, and HTTPS boundary tests.
 
 The exact reproducible commands are maintained in `.github/workflows/workspace-rebuild.yml`. Each execution uploads `workspace-rebuild.json` with repository, commit, run, status, and validation scope; retention is 30 days. A failed check fails the job. Inspect the overall run conclusion as well as its artifact.
 
