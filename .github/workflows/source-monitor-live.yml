@@ -1,0 +1,78 @@
+name: Source monitor live verification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'crawler/monitor.py'
+      - 'crawler/monitor_http.py'
+      - 'examples/source-monitor.json'
+      - '.github/workflows/source-monitor-live.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: source-monitor-live-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  live:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Establish live source baselines
+        continue-on-error: true
+        run: >-
+          python3 -m crawler.monitor --sources examples/source-monitor.json
+          --state-db artifacts/source-monitor/live.sqlite
+          --report artifacts/source-monitor/first.json
+          --markdown artifacts/source-monitor/first.md --timeout 10
+
+      - name: Compare a second live observation
+        continue-on-error: true
+        run: >-
+          python3 -m crawler.monitor --sources examples/source-monitor.json
+          --state-db artifacts/source-monitor/live.sqlite
+          --report artifacts/source-monitor/repeat.json
+          --markdown artifacts/source-monitor/repeat.md --timeout 10
+
+      - name: Check live outcomes and record evidence
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path('artifacts/source-monitor')
+          first = json.loads((root / 'first.json').read_text())
+          repeat = json.loads((root / 'repeat.json').read_text())
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as handle:
+              handle.write('# Source monitor live verification\n\n')
+              for label, report in [('First observation', first), ('Repeat observation', repeat)]:
+                  handle.write(f"## {label}\n\nStatus: {report['status']}\n\n")
+                  handle.write(f"Summary: {json.dumps(report['summary'])}\n\n")
+                  handle.write(f"Measurements: {json.dumps(report['metrics'])}\n\n")
+              handle.write('The uploaded reports preserve per-source outcomes. This job uses an ephemeral baseline; it does not maintain a recurring monitor.\n')
+          if first['status'] != 'ok' or repeat['status'] != 'ok':
+              raise SystemExit('Live source verification incomplete; inspect the retained reports.')
+          if repeat['summary']['baseline']:
+              raise SystemExit('Repeat observation unexpectedly lost an established baseline.')
+          print('Live snapshots and persisted comparison verified. A real source may change between observations.')
+          PY
+
+      - name: Retain live verification reports
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: source-monitor-live-${{ github.run_id }}
+          path: |
+            artifacts/source-monitor/first.json
+            artifacts/source-monitor/first.md
+            artifacts/source-monitor/repeat.json
+            artifacts/source-monitor/repeat.md
+          if-no-files-found: error
+          retention-days: 30

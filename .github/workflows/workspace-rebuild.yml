@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   rebuild:
-    name: Python compilation and both unit suites
+    name: Python compilation and regression suites
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -22,13 +22,13 @@ jobs:
           persist-credentials: false
       - name: Compile Python sources
         run: python3 -m compileall -q crawler crawler.py self_healing.py
-      - name: Run both isolated unit suites
-        run: python3 -m unittest test_crawler tests.test_crawler -v
+      - name: Run isolated crawl and monitor suites
+        run: python3 -m unittest test_crawler tests.test_crawler tests.test_monitor tests.test_monitor_http -v
       - name: Record execution evidence
         if: always()
         env:
           BUILD_STATUS: ${{ job.status }}
-          VALIDATION_SCOPE: 'Python compilation and both unit suites'
+          VALIDATION_SCOPE: 'Python compilation, crawl regressions, source-monitor acceptance, and HTTPS boundaries'
         run: |
           python3 - <<'PY'
           import json, os
